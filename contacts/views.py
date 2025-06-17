@@ -6,6 +6,7 @@ from rest_framework import status
 from .models import Contact, ContactNote
 from .serializers import ContactSerializer, ContactNoteSerializer
 from rest_framework.exceptions import NotFound
+from django.utils.dateparse import parse_date
 
 class ContactViewSet(ModelViewSet):
     serializer_class = ContactSerializer
@@ -13,7 +14,12 @@ class ContactViewSet(ModelViewSet):
     # Removed lookup_field = 'id' to use default 'pk'
 
     def get_queryset(self):
-        return Contact.objects.filter(owner=self.request.user)
+        queryset= Contact.objects.filter(owner=self.request.user)
+    
+        country_code = self.request.query_params.get('country_code')
+        if country_code:
+            queryset = queryset.filter(country_code__iexact=country_code)
+        return queryset
 
     def perform_create(self, serializer):
         serializer.save(owner=self.request.user)
@@ -41,4 +47,25 @@ class ContactNoteViewSet(ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return ContactNote.objects.filter(contact__owner=self.request.user)
+        queryset= ContactNote.objects.filter(contact__owner=self.request.user)
+    
+        
+        start_date = self.request.query_params.get('start_date')
+        end_date = self.request.query_params.get('end_date')
+
+        if start_date:
+            queryset = queryset.filter(created_at__date__gte=parse_date(start_date))
+        if end_date:
+            queryset = queryset.filter(created_at__date__lte=parse_date(end_date))
+
+        return queryset
+    
+    @action(detail=False, methods=['delete'], url_path='bulk-delete')
+    def bulk_delete(self, request):
+        ids = request.data.get("ids", [])
+        if not isinstance(ids, list):
+            return Response({"detail": "Invalid format. 'ids' must be a list."},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        deleted, _ = ContactNote.objects.filter(id__in=ids, contact__owner=request.user).delete()
+        return Response({"deleted": deleted}, status=status.HTTP_200_OK)
