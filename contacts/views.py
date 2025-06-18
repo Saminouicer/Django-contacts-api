@@ -7,14 +7,19 @@ from .models import Contact, ContactNote
 from .serializers import ContactSerializer, ContactNoteSerializer
 from rest_framework.exceptions import NotFound
 from django.utils.dateparse import parse_date
+from authentication.permissions import IsOwnerOrManager
+
 
 class ContactViewSet(ModelViewSet):
     serializer_class = ContactSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsOwnerOrManager]
     # Removed lookup_field = 'id' to use default 'pk'
 
     def get_queryset(self):
-        queryset= Contact.objects.filter(owner=self.request.user)
+        if self.request.user.role == 'manager':
+            queryset = Contact.objects.all()
+        else:
+            queryset = Contact.objects.filter(owner=self.request.user)
     
         country_code = self.request.query_params.get('country_code')
         if country_code:
