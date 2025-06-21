@@ -16,7 +16,7 @@ class ContactViewSet(ModelViewSet):
     # Removed lookup_field = 'id' to use default 'pk'
 
     def get_queryset(self):
-        if self.request.user.role == 'manager':
+        if self.request.user.role in ['manager', 'admin']:
             queryset = Contact.objects.all()
         else:
             queryset = Contact.objects.filter(owner=self.request.user)
@@ -31,10 +31,18 @@ class ContactViewSet(ModelViewSet):
 
     @action(detail=True, methods=['get', 'post'], url_path='notes')
     def contact_notes(self, request, pk=None):
+        # try:
+        #     contact = Contact.objects.get(pk=pk, owner=request.user)
+        # except Contact.DoesNotExist:
+        #     raise NotFound("Contact not found.")
+
         try:
-            contact = Contact.objects.get(pk=pk, owner=request.user)
+            contact = Contact.objects.get(pk=pk)
+            if contact.owner != request.user and request.user.role not in ['admin', 'manager']:
+                raise Contact.DoesNotExist
         except Contact.DoesNotExist:
             raise NotFound("Contact not found.")
+
 
         if request.method == 'POST':
             serializer = ContactNoteSerializer(data=request.data)
@@ -52,8 +60,12 @@ class ContactNoteViewSet(ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        queryset= ContactNote.objects.filter(contact__owner=self.request.user)
-    
+        user = self.request.user
+        if user.role in ['manager', 'admin']:
+            queryset = ContactNote.objects.all()
+        else:
+            queryset = ContactNote.objects.filter(contact__owner=user)
+            
         
         start_date = self.request.query_params.get('start_date')
         end_date = self.request.query_params.get('end_date')
